@@ -2,6 +2,7 @@ require("dotenv").config();
 const { Telegraf } = require("telegraf");
 const axios = require("axios");
 const cron = require("node-cron");
+const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
@@ -15,6 +16,8 @@ const EMPLOYEE_TYPES = (process.env.EMPLOYEE_TYPES || "staff")
 
 const TZ = process.env.TZ || "Asia/Tashkent";
 const CRON_TIME = process.env.CRON_TIME || "0 9 * * *";
+const HOST = process.env.HOST || "0.0.0.0";
+const PORT = Number.parseInt(process.env.PORT || "5003", 10) || 5003;
 const TYPE_LIST_PAGE_SIZE = Math.max(
   5,
   Math.min(25, Number.parseInt(process.env.TYPE_LIST_PAGE_SIZE || "15", 10) || 15)
@@ -35,7 +38,7 @@ const EMPLOYEE_TYPE_ALIASES = {
 };
 
 if (!BOT_TOKEN || !HEMIS_TOKEN) {
-  console.error("❌ BOT_TOKEN yoki HEMIS_TOKEN yo‘q. .env ni tekshiring.");
+  console.error("вќЊ BOT_TOKEN yoki HEMIS_TOKEN yoвЂq. .env ni tekshiring.");
   process.exit(1);
 }
 
@@ -169,6 +172,37 @@ function renderCustomCommandReply(template) {
     .replace(/\{TZ\}/g, TZ);
 }
 
+function startHttpServer() {
+  const server = http.createServer((req, res) => {
+    const now = new Date().toISOString();
+    if (req.url === "/" || req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(
+        JSON.stringify(
+          {
+            ok: true,
+            service: "telegram-bot",
+            time: now,
+            port: PORT,
+          },
+          null,
+          2
+        )
+      );
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ ok: false, error: "Not Found", time: now }, null, 2));
+  });
+
+  server.listen(PORT, HOST, () => {
+    console.log(`рџЊђ HTTP server ishladi: http://${HOST}:${PORT}`);
+  });
+
+  return server;
+}
+
 function isAdmin(ctx) {
   const id = String(ctx.from?.id || "");
   return ADMIN_IDS.length === 0 ? true : ADMIN_IDS.includes(id);
@@ -213,7 +247,7 @@ function toTextOrName(v) {
 }
 
 function employeeKey(e) {
-  // dublikatlarni yo‘qotish uchun
+  // dublikatlarni yoвЂqotish uchun
   return (
     pick(e, ["id", "employee_id", "uuid"]) ||
     pick(e, ["login", "username", "user_login"]) ||
@@ -221,7 +255,7 @@ function employeeKey(e) {
   );
 }
 
-// obyekt ichidagi hamma matn/sonlarni yig‘ib qidiramiz
+// obyekt ichidagi hamma matn/sonlarni yigвЂib qidiramiz
 function employeeToSearchText(e) {
   const parts = [];
   const walk = (v) => {
@@ -253,7 +287,7 @@ function formatEmployeeShort(e) {
   );
   const type = toTextOrName(pick(e, ["type", "employee_type", "employeeType"])) || "";
 
-  return `${fio || "Noma'lum"}${login ? ` (${login})` : ""}${pos ? ` — ${pos}` : ""}${dept ? ` | ${dept}` : ""}${type ? ` | type=${type}` : ""}`;
+  return `${fio || "Noma'lum"}${login ? ` (${login})` : ""}${pos ? ` вЂ” ${pos}` : ""}${dept ? ` | ${dept}` : ""}${type ? ` | type=${type}` : ""}`;
 }
 
 function getEmployeesByTypeFromCache(cache, type) {
@@ -316,7 +350,7 @@ function makeTypeListText(type, people, page, totalApiCount) {
   );
 }
 
-// HEMIS timestamp: seconds yoki milliseconds bo‘lishi mumkin
+// HEMIS timestamp: seconds yoki milliseconds boвЂlishi mumkin
 function parseHemTimestamp(ts) {
   if (ts == null) return null;
   const n = Number(ts);
@@ -351,7 +385,7 @@ function monthDayTz(date, timeZone) {
 }
 
 function getBirthField(e) {
-  // tug‘ilgan sana maydoni turlicha bo‘lishi mumkin
+  // tugвЂilgan sana maydoni turlicha boвЂlishi mumkin
   return pick(e, [
     "birth_date",
     "birthDate",
@@ -401,7 +435,7 @@ async function hemisGetAllEmployeesByTypes(types) {
     while (true) {
       const { items, pagination, raw } = await hemisGetEmployeePage(type, page, limit);
       if (!Array.isArray(items)) {
-        console.log("⚠️ Unexpected format for type:", type, raw);
+        console.log("вљ пёЏ Unexpected format for type:", type, raw);
         break;
       }
 
@@ -461,7 +495,7 @@ async function syncEmployeesCache(force = false) {
   const cache = loadCache();
   const now = Date.now();
 
-  // 6 soatda bir yangilash (force bo‘lmasa)
+  // 6 soatda bir yangilash (force boвЂlmasa)
   const SIX_HOURS = 6 * 60 * 60 * 1000;
   const hasTypeLists = EMPLOYEE_TYPES.every((type) => Array.isArray(cache.byType?.[type]));
   if (!force && cache.updatedAt && now - cache.updatedAt < SIX_HOURS && cache.items?.length && hasTypeLists) {
@@ -486,7 +520,7 @@ async function syncEmployeesCache(force = false) {
 
 async function sendBirthdayGreetings() {
   if (!state.targetChatId) {
-    console.log("⚠️ TARGET_CHAT_ID yo‘q. /setchat bilan o‘rnating.");
+    console.log("вљ пёЏ TARGET_CHAT_ID yoвЂq. /setchat bilan oвЂrnating.");
     return;
   }
 
@@ -494,7 +528,7 @@ async function sendBirthdayGreetings() {
   const today = formatDateTz(now, TZ);
 
   if (state.lastSentDate === today) {
-    console.log(`✅ Bugun (${today}) allaqachon yuborilgan.`);
+    console.log(`вњ… Bugun (${today}) allaqachon yuborilgan.`);
     return;
   }
 
@@ -510,13 +544,13 @@ async function sendBirthdayGreetings() {
     return monthDayTz(d, TZ) === todayMD;
   });
 
-  // Agar birth field umuman kelmayotgan bo‘lsa, shuni ham aytib qo‘yamiz
+  // Agar birth field umuman kelmayotgan boвЂlsa, shuni ham aytib qoвЂyamiz
   const anyBirth = employees.some((e) => parseHemTimestamp(getBirthField(e)));
 
   if (!anyBirth) {
     await bot.telegram.sendMessage(
       state.targetChatId,
-      `⚠️ API hodimlarda tug‘ilgan sana (birth_date) maydonini qaytarmayapti.\nShu sabab tabrik avtomat ishlamaydi.\n(${today})`
+      `вљ пёЏ API hodimlarda tugвЂilgan sana (birth_date) maydonini qaytarmayapti.\nShu sabab tabrik avtomat ishlamaydi.\n(${today})`
     );
     state.lastSentDate = today;
     saveState();
@@ -524,16 +558,16 @@ async function sendBirthdayGreetings() {
   }
 
   if (birthdayPeople.length === 0) {
-    await bot.telegram.sendMessage(state.targetChatId, `Bugun tug‘ilgan hodim topilmadi. 📅 (${today})`);
+    await bot.telegram.sendMessage(state.targetChatId, `Bugun tugвЂilgan hodim topilmadi. рџ“… (${today})`);
     state.lastSentDate = today;
     saveState();
     return;
   }
 
-  const lines = birthdayPeople.slice(0, 30).map((e) => `🎉 ${formatEmployeeShort(e)} — Tug‘ilgan kun muborak!`);
+  const lines = birthdayPeople.slice(0, 30).map((e) => `рџЋ‰ ${formatEmployeeShort(e)} вЂ” TugвЂilgan kun muborak!`);
 
   const text =
-    `🎂 Bugungi tug‘ilgan kunlar (${today}):\n\n` +
+    `рџЋ‚ Bugungi tugвЂilgan kunlar (${today}):\n\n` +
     lines.join("\n") +
     (birthdayPeople.length > 30 ? `\n\n(+${birthdayPeople.length - 30} ta yana bor)` : "");
 
@@ -577,29 +611,29 @@ bot.use((ctx, next) => {
 bot.start((ctx) => {
   ctx.reply(
     "Salom!\n\n" +
-      "✅ /employees — 10 ta hodim (test)\n" +
-      "✅ /list <type> [page] — type bo‘yicha ro‘yxat\n" +
-      "✅ /teachers [page] — teacher ro‘yxati\n" +
-      "✅ /search <ism/login> — hodim qidirish\n" +
-      "✅ /sync — cache yangilash (admin)\n" +
-      "✅ /types — qaysi type nechta kelayapti (admin)\n" +
-      "✅ /setchat — tabrik yuboriladigan chatni saqlash (admin)\n" +
-      "✅ /run — tabrikni qo‘lda ishga tushirish (admin)\n" +
-      "✅ /status — holat (admin)\n" +
-      "✅ /cmd_add — bot ichida yangi command qo‘shish (admin)\n" +
-      "✅ /cmd_del — custom command o‘chirish (admin)\n" +
-      "✅ /cmd_list — custom commandlar ro‘yxati (admin)\n" +
-      "✅ /cmd_show — custom command matnini ko‘rish (admin)\n" +
-      "✅ /cmd_off — buyruqni vaqtincha o‘chirish (admin)\n" +
-      "✅ /cmd_on — buyruqni qayta yoqish (admin)\n" +
-      "✅ /cmd_disabled — o‘chirilgan buyruqlar (admin)\n" +
-      "✅ /cmd_help — custom command yordam (admin)\n"
+      "вњ… /employees вЂ” 10 ta hodim (test)\n" +
+      "вњ… /list <type> [page] вЂ” type boвЂyicha roвЂyxat\n" +
+      "вњ… /teachers [page] вЂ” teacher roвЂyxati\n" +
+      "вњ… /search <ism/login> вЂ” hodim qidirish\n" +
+      "вњ… /sync вЂ” cache yangilash (admin)\n" +
+      "вњ… /types вЂ” qaysi type nechta kelayapti (admin)\n" +
+      "вњ… /setchat вЂ” tabrik yuboriladigan chatni saqlash (admin)\n" +
+      "вњ… /run вЂ” tabrikni qoвЂlda ishga tushirish (admin)\n" +
+      "вњ… /status вЂ” holat (admin)\n" +
+      "вњ… /cmd_add вЂ” bot ichida yangi command qoвЂshish (admin)\n" +
+      "вњ… /cmd_del вЂ” custom command oвЂchirish (admin)\n" +
+      "вњ… /cmd_list вЂ” custom commandlar roвЂyxati (admin)\n" +
+      "вњ… /cmd_show вЂ” custom command matnini koвЂrish (admin)\n" +
+      "вњ… /cmd_off вЂ” buyruqni vaqtincha oвЂchirish (admin)\n" +
+      "вњ… /cmd_on вЂ” buyruqni qayta yoqish (admin)\n" +
+      "вњ… /cmd_disabled вЂ” oвЂchirilgan buyruqlar (admin)\n" +
+      "вњ… /cmd_help вЂ” custom command yordam (admin)\n"
   );
 });
 
 bot.command("employees", async (ctx) => {
   try {
-    // cachedan o‘qib tez ko‘rsatamiz
+    // cachedan oвЂqib tez koвЂrsatamiz
     const cache = await syncEmployeesCache(false);
     const items = cache.items || [];
     const sample = items.slice(0, 10);
@@ -608,14 +642,14 @@ bot.command("employees", async (ctx) => {
 
     const lines = sample.map((e, i) => `${i + 1}) ${formatEmployeeShort(e)}`).join("\n");
     ctx.reply(
-      `📋 Hodimlar (namuna):\n\n${lines}\n\n` +
-        `📌 Cache: ${items.length} ta | Types: ${EMPLOYEE_TYPES.join(", ")}`
+      `рџ“‹ Hodimlar (namuna):\n\n${lines}\n\n` +
+        `рџ“Њ Cache: ${items.length} ta | Types: ${EMPLOYEE_TYPES.join(", ")}`
     );
   } catch (err) {
     const status = err?.response?.status;
     const data = err?.response?.data;
     console.error("Employees Error:", status, data || err.message);
-    ctx.reply("❌ Xatolik. Konsol logini tekshiring.");
+    ctx.reply("вќЊ Xatolik. Konsol logini tekshiring.");
   }
 });
 
@@ -626,7 +660,7 @@ bot.command("list", async (ctx) => {
     const status = err?.response?.status;
     const data = err?.response?.data;
     console.error("List Error:", status, data || err.message);
-    ctx.reply("❌ Type ro'yxatini olishda xatolik. Konsol logini tekshiring.");
+    ctx.reply("вќЊ Type ro'yxatini olishda xatolik. Konsol logini tekshiring.");
   }
 });
 
@@ -637,7 +671,7 @@ bot.command("teachers", async (ctx) => {
     const status = err?.response?.status;
     const data = err?.response?.data;
     console.error("Teachers Error:", status, data || err.message);
-    ctx.reply("❌ Teacher ro'yxatini olishda xatolik. Konsol logini tekshiring.");
+    ctx.reply("вќЊ Teacher ro'yxatini olishda xatolik. Konsol logini tekshiring.");
   }
 });
 
@@ -648,7 +682,7 @@ bot.command("staffs", async (ctx) => {
     const status = err?.response?.status;
     const data = err?.response?.data;
     console.error("Staffs Error:", status, data || err.message);
-    ctx.reply("❌ Staff ro'yxatini olishda xatolik. Konsol logini tekshiring.");
+    ctx.reply("вќЊ Staff ro'yxatini olishda xatolik. Konsol logini tekshiring.");
   }
 });
 
@@ -659,28 +693,28 @@ bot.command("employees_all", async (ctx) => {
     const status = err?.response?.status;
     const data = err?.response?.data;
     console.error("EmployeesAll Error:", status, data || err.message);
-    ctx.reply("❌ Employee ro'yxatini olishda xatolik. Konsol logini tekshiring.");
+    ctx.reply("вќЊ Employee ro'yxatini olishda xatolik. Konsol logini tekshiring.");
   }
 });
 
 bot.command("cmd_help", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo'q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yo'q (admin emas).");
   ctx.reply(buildCustomCommandsUsage());
 });
 
 bot.command("cmd_add", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo'q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yo'q (admin emas).");
 
   const { nameRaw, replyText } = parseCmdAddPayload(ctx.message?.text || "");
   const name = normalizeCommandName(nameRaw);
   if (!name || !CUSTOM_COMMAND_NAME_RE.test(name)) {
-    return ctx.reply("❌ Command nomi noto'g'ri.\n" + buildCustomCommandsUsage());
+    return ctx.reply("вќЊ Command nomi noto'g'ri.\n" + buildCustomCommandsUsage());
   }
   if (RESERVED_COMMANDS.has(name)) {
-    return ctx.reply(`❌ /${name} reserved. Boshqa nom tanlang.`);
+    return ctx.reply(`вќЊ /${name} reserved. Boshqa nom tanlang.`);
   }
   if (!replyText) {
-    return ctx.reply("❌ Javob matni bo'sh.\n" + buildCustomCommandsUsage());
+    return ctx.reply("вќЊ Javob matni bo'sh.\n" + buildCustomCommandsUsage());
   }
 
   const existed = Boolean(getCustomCommand(name));
@@ -692,38 +726,38 @@ bot.command("cmd_add", (ctx) => {
   delete customCommandsStore.disabledCommands[name];
   saveCustomCommands();
 
-  return ctx.reply(existed ? `✅ Yangilandi: /${name}` : `✅ Qo'shildi: /${name}`);
+  return ctx.reply(existed ? `вњ… Yangilandi: /${name}` : `вњ… Qo'shildi: /${name}`);
 });
 
 bot.command("cmd_del", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo'q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yo'q (admin emas).");
 
   const tail = getCommandTail(ctx.message?.text || "");
   const name = normalizeCommandName(tail.split(/\s+/)[0] || "");
-  if (!name) return ctx.reply("❌ Foydalanish: /cmd_del <nom>");
-  if (!getCustomCommand(name)) return ctx.reply(`❌ /${name} topilmadi.`);
+  if (!name) return ctx.reply("вќЊ Foydalanish: /cmd_del <nom>");
+  if (!getCustomCommand(name)) return ctx.reply(`вќЊ /${name} topilmadi.`);
 
   delete customCommandsStore.commands[name];
   delete customCommandsStore.disabledCommands[name];
   saveCustomCommands();
-  return ctx.reply(`✅ O'chirildi: /${name}`);
+  return ctx.reply(`вњ… O'chirildi: /${name}`);
 });
 
 bot.command("cmd_show", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo'q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yo'q (admin emas).");
 
   const tail = getCommandTail(ctx.message?.text || "");
   const name = normalizeCommandName(tail.split(/\s+/)[0] || "");
-  if (!name) return ctx.reply("❌ Foydalanish: /cmd_show <nom>");
+  if (!name) return ctx.reply("вќЊ Foydalanish: /cmd_show <nom>");
 
   const item = getCustomCommand(name);
-  if (!item) return ctx.reply(`❌ /${name} topilmadi.`);
+  if (!item) return ctx.reply(`вќЊ /${name} topilmadi.`);
 
   return ctx.reply(`/` + name + " =>\n" + String(item.replyText || ""));
 });
 
 bot.command("cmd_list", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo'q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yo'q (admin emas).");
 
   const names = listCustomCommandNames();
   if (!names.length) return ctx.reply("Custom command yo'q.");
@@ -739,37 +773,37 @@ bot.command("cmd_list", (ctx) => {
 });
 
 bot.command("cmd_off", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo'q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yo'q (admin emas).");
 
   const tail = getCommandTail(ctx.message?.text || "");
   const name = normalizeCommandName(tail.split(/\s+/)[0] || "");
-  if (!name || !CUSTOM_COMMAND_NAME_RE.test(name)) return ctx.reply("❌ Foydalanish: /cmd_off <nom>");
-  if (LOCKED_COMMANDS.has(name)) return ctx.reply(`❌ /${name} ni o'chirib bo'lmaydi.`);
+  if (!name || !CUSTOM_COMMAND_NAME_RE.test(name)) return ctx.reply("вќЊ Foydalanish: /cmd_off <nom>");
+  if (LOCKED_COMMANDS.has(name)) return ctx.reply(`вќЊ /${name} ni o'chirib bo'lmaydi.`);
 
   const exists = RESERVED_COMMANDS.has(name) || Boolean(getCustomCommand(name));
-  if (!exists) return ctx.reply(`❌ /${name} topilmadi.`);
-  if (isCommandDisabled(name)) return ctx.reply(`ℹ️ /${name} allaqachon o'chirilgan.`);
+  if (!exists) return ctx.reply(`вќЊ /${name} topilmadi.`);
+  if (isCommandDisabled(name)) return ctx.reply(`в„№пёЏ /${name} allaqachon o'chirilgan.`);
 
   customCommandsStore.disabledCommands[name] = true;
   saveCustomCommands();
-  return ctx.reply(`✅ Vaqtincha o'chirildi: /${name}`);
+  return ctx.reply(`вњ… Vaqtincha o'chirildi: /${name}`);
 });
 
 bot.command("cmd_on", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo'q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yo'q (admin emas).");
 
   const tail = getCommandTail(ctx.message?.text || "");
   const name = normalizeCommandName(tail.split(/\s+/)[0] || "");
-  if (!name || !CUSTOM_COMMAND_NAME_RE.test(name)) return ctx.reply("❌ Foydalanish: /cmd_on <nom>");
+  if (!name || !CUSTOM_COMMAND_NAME_RE.test(name)) return ctx.reply("вќЊ Foydalanish: /cmd_on <nom>");
 
-  if (!isCommandDisabled(name)) return ctx.reply(`ℹ️ /${name} hozir ham yoqilgan.`);
+  if (!isCommandDisabled(name)) return ctx.reply(`в„№пёЏ /${name} hozir ham yoqilgan.`);
   delete customCommandsStore.disabledCommands[name];
   saveCustomCommands();
-  return ctx.reply(`✅ Qayta yoqildi: /${name}`);
+  return ctx.reply(`вњ… Qayta yoqildi: /${name}`);
 });
 
 bot.command("cmd_disabled", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo'q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yo'q (admin emas).");
 
   const disabled = listDisabledCommands();
   if (!disabled.length) return ctx.reply("O'chirilgan buyruqlar yo'q.");
@@ -796,42 +830,42 @@ bot.command("search", async (ctx) => {
 
     if (!found.length) {
       return ctx.reply(
-        "Topilmadi ❌\n\n" +
-          "Eslatma: Agar siz talaba bo‘lsangiz, bu employee-listda chiqmaydi.\n" +
-          "Agar siz hodim bo‘lsangiz ham chiqmasa, ehtimol type boshqa yoki inactive.\n" +
-          "Admin bo‘lsangiz: /types ni ko‘ring."
+        "Topilmadi вќЊ\n\n" +
+          "Eslatma: Agar siz talaba boвЂlsangiz, bu employee-listda chiqmaydi.\n" +
+          "Agar siz hodim boвЂlsangiz ham chiqmasa, ehtimol type boshqa yoki inactive.\n" +
+          "Admin boвЂlsangiz: /types ni koвЂring."
       );
     }
 
     const lines = found.map((e, i) => `${i + 1}) ${formatEmployeeShort(e)}`).join("\n");
-    ctx.reply("✅ Topildi:\n\n" + lines);
+    ctx.reply("вњ… Topildi:\n\n" + lines);
   } catch (err) {
     const status = err?.response?.status;
     const data = err?.response?.data;
     console.error("Search Error:", status, data || err.message);
-    ctx.reply("❌ Qidiruvda xatolik. Konsol logini tekshiring.");
+    ctx.reply("вќЊ Qidiruvda xatolik. Konsol logini tekshiring.");
   }
 });
 
 bot.command("sync", async (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo‘q (admin emas).");
-  ctx.reply("⏳ Sync qilinyapti...");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yoвЂq (admin emas).");
+  ctx.reply("вЏі Sync qilinyapti...");
   try {
     const cache = await syncEmployeesCache(true);
     ctx.reply(
-      `✅ Sync tayyor.\n` +
+      `вњ… Sync tayyor.\n` +
         `Hodimlar: ${cache.items.length}\n` +
         `Types: ${cache.types.join(", ")}\n` +
         `Counts: ${Object.entries(cache.counts).map(([k, v]) => `${k}=${v}`).join(", ")}`
     );
   } catch (e) {
     console.error(e);
-    ctx.reply("❌ Sync xatolik. Konsolni tekshiring.");
+    ctx.reply("вќЊ Sync xatolik. Konsolni tekshiring.");
   }
 });
 
 bot.command("types", async (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo‘q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yoвЂq (admin emas).");
   try {
     const cache = await syncEmployeesCache(false);
     const counts = cache.counts || {};
@@ -845,43 +879,43 @@ bot.command("types", async (ctx) => {
     );
   } catch (e) {
     console.error(e);
-    ctx.reply("❌ Xatolik.");
+    ctx.reply("вќЊ Xatolik.");
   }
 });
 
 bot.command("setchat", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo‘q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yoвЂq (admin emas).");
   state.targetChatId = String(ctx.chat.id);
   saveState();
-  ctx.reply(`✅ TARGET_CHAT_ID saqlandi: ${state.targetChatId}`);
+  ctx.reply(`вњ… TARGET_CHAT_ID saqlandi: ${state.targetChatId}`);
 });
 
 bot.command("status", (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo‘q (admin emas).");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yoвЂq (admin emas).");
   const cache = loadCache();
   const cacheByType = EMPLOYEE_TYPES.map((t) => `${t}=${getEmployeesByTypeFromCache(cache, t).length}`).join(", ");
   ctx.reply(
-    "⚙️ Status:\n" +
+    "вљ™пёЏ Status:\n" +
       `EMPLOYEE_TYPES = ${EMPLOYEE_TYPES.join(", ")}\n` +
       `TZ = ${TZ}\n` +
       `CRON_TIME = ${CRON_TIME}\n` +
-      `TARGET_CHAT_ID = ${state.targetChatId || "(yo‘q)"}\n` +
-      `lastSentDate = ${state.lastSentDate || "(yo‘q)"}\n` +
-      `cacheUpdated = ${cache.updatedAt ? new Date(cache.updatedAt).toLocaleString() : "(yo‘q)"}\n` +
+      `TARGET_CHAT_ID = ${state.targetChatId || "(yoвЂq)"}\n` +
+      `lastSentDate = ${state.lastSentDate || "(yoвЂq)"}\n` +
+      `cacheUpdated = ${cache.updatedAt ? new Date(cache.updatedAt).toLocaleString() : "(yoвЂq)"}\n` +
       `cacheByType = ${cacheByType}\n` +
       `cacheCount = ${cache.items?.length || 0}`
   );
 });
 
 bot.command("run", async (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply("❌ Ruxsat yo‘q (admin emas).");
-  ctx.reply("⏳ Tabrik ishga tushyapti...");
+  if (!isAdmin(ctx)) return ctx.reply("вќЊ Ruxsat yoвЂq (admin emas).");
+  ctx.reply("вЏі Tabrik ishga tushyapti...");
   try {
     await sendBirthdayGreetings();
-    ctx.reply("✅ Tayyor.");
+    ctx.reply("вњ… Tayyor.");
   } catch (e) {
     console.error(e);
-    ctx.reply("❌ Xatolik. Konsol logini tekshiring.");
+    ctx.reply("вќЊ Xatolik. Konsol logini tekshiring.");
   }
 });
 
@@ -905,7 +939,7 @@ cron.schedule(
   CRON_TIME,
   async () => {
     try {
-      console.log("⏰ Cron ishga tushdi...");
+      console.log("вЏ° Cron ishga tushdi...");
       await sendBirthdayGreetings();
     } catch (e) {
       console.error("Cron error:", e);
@@ -914,6 +948,13 @@ cron.schedule(
   { timezone: TZ }
 );
 
-bot.launch().then(() => console.log("✅ Bot ishga tushdi"));
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+const httpServer = startHttpServer();
+bot.launch().then(() => console.log("Bot ishga tushdi"));
+process.once("SIGINT", () => {
+  httpServer.close();
+  bot.stop("SIGINT");
+});
+process.once("SIGTERM", () => {
+  httpServer.close();
+  bot.stop("SIGTERM");
+});
